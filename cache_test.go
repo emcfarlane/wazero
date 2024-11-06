@@ -131,6 +131,32 @@ func TestCompilationCache(t *testing.T) {
 		require.Equal(t, compiledModule0.compiledEngine, compiledModule1.compiledEngine)
 		require.Equal(t, compiledModule1.compiledEngine, compiledModule2.compiledEngine)
 	})
+
+	t.Run("duplicate modules", func(t *testing.T) {
+		config := NewRuntimeConfig()
+		rt := NewRuntimeWithConfig(ctx, config)
+
+		// Compiling the same module twice returns the same compiled module.
+		// Closing one should not affect the other.
+		compiled1, err := rt.CompileModule(ctx, facWasm) // Original.
+		require.NoError(t, err)
+		compiled2, err := rt.CompileModule(ctx, facWasm) // Duplicate.
+		require.NoError(t, err)
+
+		// Instantiating the module then closing the compiled module should not affect the other compiled module.
+		module1, err := rt.InstantiateModule(ctx, compiled1, NewModuleConfig().WithName("foo"))
+		require.NoError(t, err)
+		require.NotNil(t, module1)
+
+		require.NoError(t, compiled1.Close(ctx))
+
+		// This compiled module should still be usable.
+		module2, err := rt.InstantiateModule(ctx, compiled2, NewModuleConfig().WithName("bar"))
+		require.NoError(t, err) // FAILs: expected no error, but was source module must be compiled before instantiation
+		require.NotNil(t, module2)
+
+		require.NoError(t, compiled2.Close(ctx))
+	})
 }
 
 func getCacheSharedRuntimes(ctx context.Context, t *testing.T) (foo, bar *runtime) {
